@@ -14,7 +14,7 @@
 // measure continuity/voltage on its load side to confirm it actually
 // switches the heater circuit.
 
-static const uint8_t HEATER_PWM_PIN = 9;
+static const uint8_t HEATER_PWM_PIN = A3; // CoolEn header
 
 void setup() {
   pinMode(HEATER_PWM_PIN, OUTPUT);

@@ -6,16 +6,12 @@
 //   pio run -e thermistor_test -t upload
 //   pio device monitor -b 9600
 //
-// Wiring: THERMISTOR_EXCITE_PIN (driven HIGH, acts as "5V") -> 4.7k resistor
-// -> THERMISTOR_PIN -> NTC -> GND.
+// Wiring: 5V -> 4.7k resistor -> THERMISTOR_PIN (A6, Nano only) -> NTC -> GND.
 
-static const uint8_t THERMISTOR_PIN = A0;
-static const uint8_t THERMISTOR_EXCITE_PIN = A1;
+static const uint8_t THERMISTOR_PIN = A6;
 
 void setup() {
   Serial.begin(9600);
-  pinMode(THERMISTOR_EXCITE_PIN, OUTPUT);
-  digitalWrite(THERMISTOR_EXCITE_PIN, HIGH);
   Serial.println(F("Thermistor ADC test starting..."));
   Serial.println(F("adc should read ~950-990 at room temp with a 100k NTC + 4.7k divider."));
   Serial.println(F("adc near 0   = likely short / no resistor / wrong pin"));

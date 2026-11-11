@@ -51,6 +51,16 @@
 // on V3 and V4, or re-check the speeds after switching shields.
 // ---------------------------------------------------------------------------
 
+// ---- Firmware version ------------------------------------------------------
+// Semantic version, also used as the git tag (v<version>). Shown on the LCD
+// splash screen, at boot and by the Serial '?' command.
+#define FIRMWARE_VERSION "1.1.0"
+#if defined(CNC_SHIELD_V4)
+#define FIRMWARE_TARGET "Nano + CNC Shield V4"
+#else
+#define FIRMWARE_TARGET "UNO + CNC Shield V3"
+#endif
+
 // ---- Pin definitions --------------------------------------------------
 #if defined(CNC_SHIELD_V4)
 // This CNC Shield V4 routes the X socket's STEP/DIR swapped vs. the GRBL
@@ -119,7 +129,7 @@ static const float DEFAULT_SPEED_SPS = 1000.0f;
 static const float MIN_ACCEL_SPS2 = 50.0f;    // steps/sec^2
 static const float MAX_ACCEL_SPS2 = 2000.0f;  // steps/sec^2
 static const float ACCEL_STEP_SPS2 = 50.0f;   // change per encoder detent
-static const float DEFAULT_ACCELERATION_SPS2 = 300.0f;
+static const float DEFAULT_ACCELERATION_SPS2 = 1000.0f;  // short, firm ramp: 100 -> 1000 sps in ~0.9s
 
 // ---- Step generation (Timer1, CTC mode, /8 prescaler = 2MHz tick) -------
 // Motion runs entirely in interrupts, so nothing in loop() (LCD I2C writes,
@@ -140,17 +150,30 @@ static const float RAMP_TICK_S = 0.002f;
 // as a "tick"; a moderate start speed (~80-150 for an unloaded motor) skips
 // that range - the motor can start and stop there instantly. Too high and
 // the motor stalls/buzzes at start under load. >= 31 (Timer1 floor).
-static const float START_STOP_SPEED_DEFAULT_SPS = 32.0f;
+// Default 100: the motor starts/stops instantly at this speed (only ~6
+// full steps/s at 1/16 microstepping, far below the pull-in rate), so the
+// ramp does not crawl through the slowest range first.
+static const float START_STOP_SPEED_DEFAULT_SPS = 100.0f;
 static const float START_STOP_SPEED_MIN_SPS = 31.0f;
 static const float START_STOP_SPEED_MAX_SPS = 400.0f;
 // S-curve smoothing (Serial: J<seconds>): time for the acceleration itself
 // to build up from 0 to the set acceleration (and to fade back to 0 when
 // reaching the target speed). 0 = plain linear ramp (abrupt jerk at the
 // start/end of every ramp); larger = softer, but the ramp takes longer.
-static const float RAMP_JERK_TIME_DEFAULT_S = 0.4f;
+// Default 0: constant-acceleration (trapezoidal) ramp, the same start/stop
+// profile as the old AccelStepper firmware (43b52a5), which was preferred
+// on this machine over the S-curve. J0.4 brings the S-curve back.
+static const float RAMP_JERK_TIME_DEFAULT_S = 0.0f;
 static const float RAMP_JERK_TIME_MAX_S = 2.0f;
 volatile float startStopSpeedSps = START_STOP_SPEED_DEFAULT_SPS;  // read by the ramp ISR
 volatile float rampJerkTimeS = RAMP_JERK_TIME_DEFAULT_S;          // read by the ramp ISR
+// Speed ramp on/off (Serial: N). Off = start directly at the target speed
+// and stop at once, no acceleration/deceleration. Not saved in EEPROM, so
+// every power-up starts with this default. With the ramp off, a high target
+// speed (or a heavy load) can make the motor stall at start - lower the
+// speed or turn the ramp back on if it only buzzes.
+static const bool RAMP_ENABLED_DEFAULT = true;
+volatile bool rampEnabled = RAMP_ENABLED_DEFAULT;                 // read by the ramp ISR
 
 // Driver enable timing around a move:
 //  - settle: after ENABLE the coils snap the rotor to the nearest full-step
@@ -177,9 +200,17 @@ volatile bool jogActive = false;
 volatile bool jogDone = false;
 volatile uint32_t jogStepsRemaining = 0;
 
+// Step timing diagnostic (Serial: M). In CTC mode TCNT1 restarts from 0 at
+// the compare match, so its value on ISR entry is how late this STEP pulse
+// is, in 0.5us ticks (plus the constant ISR prologue). A large maximum means
+// another interrupt or a cli() section is delaying steps (= uneven motion).
+volatile uint16_t stepLatencyMaxTicks = 0;
+
 ISR(TIMER1_COMPA_vect) {
+  uint16_t latency = TCNT1;
   // Direct port write: digitalWrite() is ~4us.
   PORTD |= _BV(X_STEP_PORTD_BIT);
+  if (latency > stepLatencyMaxTicks) stepLatencyMaxTicks = latency;
   __builtin_avr_delay_cycles(32);  // 2us high - A4988 needs >=1us, DRV8825 >=1.9us
   PORTD &= ~_BV(X_STEP_PORTD_BIT);
   // Safe to change OCR1A here: TCNT1 has just been reset to 0, so the new
@@ -735,7 +766,8 @@ void startRun() {
       enableDriver(true);
       delay(DRIVER_SETTLE_MS);  // let the rotor snap/settle before stepping
     }
-    float startSpeed = startStopSpeedSps;
+    // Ramp off: start directly at the target speed (no acceleration).
+    float startSpeed = rampEnabled ? startStopSpeedSps : targetSpeed;
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
       currentSpeedSps = startSpeed;  // ramp up from here
       currentAccelSps2 = 0.0f;       // S-curve starts with zero accel
@@ -1303,7 +1335,26 @@ void processCommandLine(const String &line) {
       Serial.println(lcd.present ? F("") : F(" (LCD not detected!)"));
       break;
     }
+    case 'N':
+    case 'n':
+      rampEnabled = !rampEnabled;
+      Serial.println(rampEnabled ? F("Ramp ON (accel/decel)") : F("Ramp OFF (instant start/stop)"));
+      break;
+    case 'M':
+    case 'm': {
+      uint16_t ticks;
+      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        ticks = stepLatencyMaxTicks;
+        stepLatencyMaxTicks = 0;
+      }
+      Serial.print(F("Step latency max "));
+      Serial.print(ticks / 2.0f, 1);
+      Serial.print(F("us at speed "));
+      Serial.println(currentSpeedSps);
+      break;
+    }
     case '?':
+      Serial.print(F("fw=v" FIRMWARE_VERSION " "));
       Serial.print(F("state="));
       Serial.print(state == STATE_RUNNING ? F("RUNNING") : state == STATE_STOPPING ? F("STOPPING") : F("STOPPED"));
       Serial.print(F(" speed="));
@@ -1316,6 +1367,8 @@ void processCommandLine(const String &line) {
       Serial.print(startStopSpeedSps);
       Serial.print(F(" J="));
       Serial.print(rampJerkTimeS);
+      Serial.print(F(" ramp="));
+      Serial.print(rampEnabled ? F("ON") : F("OFF"));
       Serial.print(F(" temp="));
       Serial.print(currentTempC);
       Serial.print(F("/"));
@@ -1401,6 +1454,13 @@ static void rampTick() {
   float newSpeed = speed + accel * dt;
   // Snap onto the target instead of overshooting past it.
   if ((err >= 0.0f && newSpeed >= target) || (err < 0.0f && newSpeed <= target)) {
+    newSpeed = target;
+    accel = 0.0f;
+  }
+  // Ramp off (Serial: N): jump straight to the target. While RUNNING that
+  // applies a new speed at once; while STOPPING the target is the floor, so
+  // the stop check below ends the move on this tick (<= 2ms after the stop).
+  if (!rampEnabled) {
     newSpeed = target;
     accel = 0.0f;
   }
@@ -1611,7 +1671,7 @@ void printCentered(uint8_t row, const __FlashStringHelper *text) {
 void showSplashScreen() {
   lcd.clear();
   printCentered(0, F("PET Filament"));
-  printCentered(1, F("Maker v1"));
+  printCentered(1, F("Maker v" FIRMWARE_VERSION));
   delay(1500);
   lcd.clear();
 }
@@ -1719,6 +1779,23 @@ void earlyWatchdogDisable() {
   wdt_disable();
 }
 
+// Prints why the MCU (re)started, from the MCUSR copy taken in .init3.
+// Several flags can be set at once (e.g. POWER-ON together with BROWNOUT).
+// Optiboot (UNO, nano_new) clears MCUSR itself before jumping to the
+// sketch, so there this usually reads 0 = unknown; the old Nano bootloader
+// leaves it intact.
+void printResetCause() {
+  Serial.print(F("Reset cause: 0x"));
+  Serial.print(resetCause, HEX);
+  if (resetCause & _BV(PORF)) Serial.print(F(" POWER-ON"));
+  if (resetCause & _BV(EXTRF)) Serial.print(F(" EXTERNAL(reset pin)"));
+  if (resetCause & _BV(BORF)) Serial.print(F(" BROWNOUT"));
+  if (resetCause & _BV(WDRF)) Serial.print(F(" WATCHDOG"));
+  if ((resetCause & (_BV(PORF) | _BV(EXTRF) | _BV(BORF) | _BV(WDRF))) == 0)
+    Serial.print(F(" unknown (cleared by bootloader)"));
+  Serial.println();
+}
+
 void setup() {
   wdt_disable(); // belt-and-braces; the real clear already happened in earlyWatchdogDisable()
 
@@ -1729,6 +1806,7 @@ void setup() {
   pinMode(HEATER_PIN, OUTPUT);
 
   Serial.begin(9600);
+  printResetCause();
 
   loadSettingsFromEeprom();
 
@@ -1752,8 +1830,8 @@ void setup() {
   lcd.backlight();
   showSplashScreen();
 
-  Serial.println(F("PET Bottle Filament Maker ready."));
-  Serial.println(F("Commands: S A V J G<steps> C<run,idle> R X D T<tempC> L P I K F B ?"));
+  Serial.println(F("PET Bottle Filament Maker v" FIRMWARE_VERSION " (" FIRMWARE_TARGET ") ready."));
+  Serial.println(F("Commands: S A V J N G<steps> C<run,idle> R X D M T<tempC> L P I K F B ?"));
 
   // Enable last, after every blocking setup step (including the splash
   // delay) has already completed - a true loop() hang now gets the MCU

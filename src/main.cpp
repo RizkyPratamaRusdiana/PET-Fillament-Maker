@@ -37,9 +37,9 @@
 // LCD I2C uses the ATmega328P's fixed I2C bus: A4 = SDA, A5 = SCL (same on
 // UNO and Nano).
 // Heater:
-//   Thermistor  -> A6  (analog-input-only pin, Nano only - the UNO has no
-//                        A6 header; voltage divider:
-//                        5V -> 4.7k resistor -> A6 -> NTC -> GND)
+//   Thermistor  -> A7  (analog-input-only pin, Nano only - the UNO has no
+//                        A7 header; voltage divider:
+//                        5V -> 4.7k resistor -> A7 -> NTC -> GND)
 //   Heater/SSR  -> A3  (CoolEn header; to the MOSFET/SSR module signal
 //                        input; module GND shared with Arduino GND, heater
 //                        itself on its own 12V supply)
@@ -82,7 +82,7 @@ static const uint8_t ENCODER_CLK_PIN = A0;
 static const uint8_t ENCODER_DT_PIN = A1;
 static const uint8_t ENCODER_SW_PIN = A2;
 
-static const uint8_t THERMISTOR_PIN = A6;
+static const uint8_t THERMISTOR_PIN = A7;
 static const uint8_t HEATER_PIN = A3;
 
 // ---- Debug output ----------------------------------------------------------

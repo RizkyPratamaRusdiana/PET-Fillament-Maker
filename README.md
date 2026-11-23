@@ -15,7 +15,7 @@ command.
 | Part | Notes |
 |------|-------|
 | Arduino Nano (ATmega328P) + CNC Shield V4 | Main target (`env:nano` / `env:nano_new`) |
-| Arduino UNO (ATmega328P) + CNC Shield V3 | Supported, but has no A6 pin, so no heater control (see below) |
+| Arduino UNO (ATmega328P) + CNC Shield V3 | Supported, but has no A7 pin, so no heater control (see below) |
 | Stepper driver (A4988, tested) | X socket only. Y/Z/A sockets stay empty |
 | NEMA 17 stepper (17HS4401: 1.8°, 1.7 A/phase) | Puller and spool winder |
 | KY-040 rotary encoder with push button | Operator input |
@@ -39,7 +39,7 @@ command.
 | KY-040 `SW` | **Resume** | A2 |
 | SSR / MOSFET `IN+` | **CoolEn** | A3 (Nano only) |
 | LCD `SDA` / `SCL` | check your shield (see the wiring guide) | A4 / A5 |
-| Thermistor divider | no marker, wire straight to the Nano pin | A6 (Nano only) |
+| Thermistor divider | no marker, wire straight to the Nano pin | A7 (Nano only) |
 
 All pins are defined at the top of [src/main.cpp](src/main.cpp). The UNO and
 the Nano both use the ATmega328P, so the pin numbers are the same. The only
@@ -123,13 +123,13 @@ reconnected LCD comes back on its own.
 
 | Signal | Arduino pin | CNC shield header | Notes |
 |--------|-------------|-------------------|-------|
-| Thermistor | **A6** | — | Analog-only pin. **Nano only**: the UNO has no A6 |
+| Thermistor | **A7** | — | Analog-only pin. **Nano only**: the UNO has no A7 |
 | Heater output | **A3** | CoolEn | To the SSR/MOSFET module signal input |
 
 Thermistor voltage divider:
 
 ```
-5V ──[ 4.7kΩ ]──┬── A6
+5V ──[ 4.7kΩ ]──┬── A7
                 │
               [NTC 100k]
                 │
@@ -162,8 +162,8 @@ GND ──────────────► SSR / MOSFET module  IN (-) / 
 | D3 | free | A3 | Heater SSR/MOSFET (CoolEn) |
 | D4 | free | A4 | LCD SDA |
 | D5 | X DIR (V3) / X STEP (V4) | A5 | LCD SCL |
-| D6, D7 | free | A6 | Thermistor (Nano only) |
-| D8 | Driver ENABLE (active LOW) | A7 | free (analog input only) |
+| D6, D7 | free | A6 | free (analog input only) |
+| D8 | Driver ENABLE (active LOW) | A7 | Thermistor (Nano only) |
 | D9-D13 | free | | |
 
 Timers in use: Timer1 (step pulses) and Timer2 (500 Hz speed ramp). PWM on
@@ -234,7 +234,7 @@ Each one has an env per board (`_uno`, `_nano`, `_nano_new`) where it applies.
 
 | Env | Sketch | Purpose |
 |-----|--------|---------|
-| `thermistor_test_nano` | [src/thermistor_test.cpp](src/thermistor_test.cpp) | Prints the raw ADC value of A6 to check the thermistor divider |
+| `thermistor_test_nano` | [src/thermistor_test.cpp](src/thermistor_test.cpp) | Prints the raw ADC value of A7 to check the thermistor divider |
 | `ssr_test_nano` | [src/ssr_test.cpp](src/ssr_test.cpp) | Switches the heater output on A3 with `1` / `0` over Serial |
 | `pin_probe_nano` | [src/pin_probe.cpp](src/pin_probe.cpp) | Prints every pin that changes level, to find which pin a shield header is wired to |
 | `step_finder_nano` | [src/step_finder.cpp](src/step_finder.cpp) | Pulses one chosen pin for 3 s to find the real X STEP line |

@@ -6,7 +6,7 @@ dari modul, ke **marker (tulisan silkscreen) di CNC shield**, ke pin Arduino.
 | Board | Shield | PlatformIO env | Status |
 |-------|--------|----------------|--------|
 | Arduino Nano (ATmega328P) | CNC Shield V4 | `nano` / `nano_new` | Target utama, semua fitur |
-| Arduino UNO (ATmega328P) | CNC Shield V3 | `uno` | Motor, encoder, LCD. **Heater tidak didukung** (UNO tidak punya A6) |
+| Arduino UNO (ATmega328P) | CNC Shield V3 | `uno` | Motor, encoder, LCD. **Heater tidak didukung** (UNO tidak punya A7) |
 
 ## Arti tanda di dokumen ini
 
@@ -32,7 +32,7 @@ dari modul, ke **marker (tulisan silkscreen) di CNC shield**, ke pin Arduino.
 | 7 | Modul SSR / MOSFET | `IN+` / `S` | **CoolEn** | A3 | ⚠️ tidak dipakai | 📄 |
 | 8 | LCD I2C (PCF8574) | `SDA` | ❓ lihat [bagian 5](#5-lcd-16x2-i2c) | A4 | 📄 | 📄 |
 | 9 | LCD I2C (PCF8574) | `SCL` | ❓ lihat [bagian 5](#5-lcd-16x2-i2c) | A5 | 📄 | 📄 |
-| 10 | Thermistor 100k + 4.7kΩ | titik tengah divider | **Tidak ada marker**, langsung ke pin Nano | A6 | ❌ tidak ada | 📄 |
+| 10 | Thermistor 100k + 4.7kΩ | titik tengah divider | **Tidak ada marker**, langsung ke pin Nano | A7 | ❌ tidak ada | 📄 |
 
 > **Satu-satunya pin yang berbeda di firmware antara V3 dan V4 adalah X STEP / X DIR.**
 > Semua baris di atas sama nomornya di kedua board, karena UNO dan Nano sama-sama
@@ -152,7 +152,7 @@ Ukur antara potensiometer dan GND, dengan supply motor menyala.
 ## 4. Heater: SSR / MOSFET (header CoolEn)
 
 **Hanya di Nano + V4.** Di UNO + V3 jangan sambungkan SSR, dan jangan pakai
-perintah `T`: thermistor A6 tidak ada di UNO, sehingga suhu yang terbaca palsu.
+perintah `T`: thermistor A7 tidak ada di UNO, sehingga suhu yang terbaca palsu.
 
 ```
    Marker CNC shield                 Modul SSR / MOSFET
@@ -189,18 +189,18 @@ perintah `T`: thermistor A6 tidak ada di UNO, sehingga suhu yang terbaca palsu.
 
 ## 6. Thermistor (Nano saja, tanpa marker di shield)
 
-Shield tidak punya header untuk A6. Sambungkan kabel langsung ke pin **A6**
+Shield tidak punya header untuk A7. Sambungkan kabel langsung ke pin **A7**
 di Nano.
 
 ```
-   5V ──[ 4,7 kΩ ]──┬──► Nano A6
+   5V ──[ 4,7 kΩ ]──┬──► Nano A7
                     │
                  [ NTC 100k ]
                     │
    GND ─────────────┘
 ```
 
-A6 adalah pin khusus analog. Pin ini hanya ada di Nano (chip TQFP-32), tidak
+A7 adalah pin khusus analog. Pin ini hanya ada di Nano (chip TQFP-32), tidak
 ada di UNO (chip DIP-28).
 
 ---
@@ -238,7 +238,7 @@ berbeda dari standar, jadi routing marker lain juga tidak boleh dianggap sama.
 | D13 | `SpnDir`. Juga A.DIR lewat jumper | ❓ |
 | RESET | `E-Stop` | ❓ |
 
-Pin bebas untuk pengembangan: **D3, D4, D6, D7, D9–D13, A7**.
+Pin bebas untuk pengembangan: **D3, D4, D6, D7, D9–D13, A6**.
 
 - PWM hardware di D3 / D11 tidak bisa dipakai, karena Timer2 dipakai untuk ramp.
 - PWM hardware di D9 / D10 juga tidak bisa dipakai, karena Timer1 dipakai untuk step.
@@ -269,8 +269,8 @@ Pin bebas untuk pengembangan: **D3, D4, D6, D7, D9–D13, A7**.
 | A3 | PC3 | ADC3 | Heater SSR |
 | A4 | PC4 | ADC4, SDA | LCD SDA |
 | A5 | PC5 | ADC5, SCL | LCD SCL |
-| A6 | — | ADC6 (analog saja, Nano) | Thermistor |
-| A7 | — | ADC7 (analog saja, Nano) | bebas |
+| A6 | — | ADC6 (analog saja, Nano) | bebas |
+| A7 | — | ADC7 (analog saja, Nano) | Thermistor |
 
 Timer yang dipakai firmware:
 

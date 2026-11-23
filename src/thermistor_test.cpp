@@ -6,9 +6,9 @@
 //   pio run -e thermistor_test -t upload
 //   pio device monitor -b 9600
 //
-// Wiring: 5V -> 4.7k resistor -> THERMISTOR_PIN (A6, Nano only) -> NTC -> GND.
+// Wiring: 5V -> 4.7k resistor -> THERMISTOR_PIN (A7, Nano only) -> NTC -> GND.
 
-static const uint8_t THERMISTOR_PIN = A6;
+static const uint8_t THERMISTOR_PIN = A7;
 
 void setup() {
   Serial.begin(9600);

@@ -4,6 +4,20 @@ Versions follow [Semantic Versioning](https://semver.org/). Each release is
 tagged `v<version>` in git, and the same number is `FIRMWARE_VERSION` in
 [src/main.cpp](src/main.cpp).
 
+## 1.1.1
+
+Safety
+- A thermistor reading below 0 °C now counts as an invalid reading (latches
+  `FAULT:SENSOR` after three in a row) instead of a very cold block that the
+  PID would heat at full power.
+
+Hardware
+- Thermistor input moved from A6 to A7. A6 is now free.
+- New envs `nano_xy_encoder` / `nano_new_xy_encoder` (`-DENCODER_ON_XY_LIMITS`):
+  encoder CLK/DT on the X+/X- (D9) and Y+/Y- (D10) end-stop headers, for
+  shields whose Abort/Hold headers don't pass the rotation pulses. The default
+  envs keep CLK/DT on Abort/Hold (A0/A1).
+
 ## 1.1.0
 
 Motion

@@ -104,6 +104,13 @@ them directly from bits 0 and 1 of `PINC`. A0/A1 have no external interrupt,
 which is why a pin-change interrupt is used. Polling alone would miss detents
 while `loop()` is busy with LCD I2C writes or thermistor reads.
 
+**Option: encoder on the X+ / Y+ headers.** On some CNC Shield V4 boards the
+button works on Resume but turning the encoder does nothing, because the
+Abort/Hold headers don't pass the short rotation pulses. Then wire CLK to the
+**X+/X-** header (D9) and DT to the **Y+/Y-** header (D10), keep SW on Resume,
+and build the `nano_xy_encoder` (or `nano_new_xy_encoder`) env. It sets
+`-DENCODER_ON_XY_LIMITS`, which moves the decoder to `PCINT0_vect` / `PINB`.
+
 ### LCD (16x2, I2C)
 
 | LCD backpack pin | Arduino pin |
@@ -182,6 +189,7 @@ The board is chosen by the PlatformIO **env**, never by editing the code.
 | Arduino Nano clone (CH340, old bootloader) + CNC Shield V4 | **`nano`** (default) | `board = nanoatmega328`, `-DCNC_SHIELD_V4` |
 | Arduino Nano with new Optiboot bootloader + CNC Shield V4 | `nano_new` | `board = nanoatmega328new`, `-DCNC_SHIELD_V4` |
 | Arduino UNO + CNC Shield V3 | `uno` | `board = uno`, no shield flag |
+| Nano + CNC Shield V4, encoder CLK/DT on X+/Y+ headers | `nano_xy_encoder` / `nano_new_xy_encoder` | as `nano` / `nano_new`, plus `-DENCODER_ON_XY_LIMITS` |
 
 Not sure which Nano bootloader you have? Try `nano` first. If the upload fails
 with `stk500_getsync(): not in sync`, use `nano_new`.
@@ -299,8 +307,10 @@ never starts heating by itself after a reset.
 
 ## Heater safety
 
-- **Sensor fault**: any invalid reading (open or shorted thermistor) cuts the
-  heater immediately. Three in a row latch `FAULT:SENSOR`.
+- **Sensor fault**: any invalid reading (open or shorted thermistor, or a
+  reading below 0 °C, which is what a broken or high-resistance thermistor or
+  a bad pin looks like) cuts the heater immediately. Three in a row latch
+  `FAULT:SENSOR`.
 - **Over-temperature**: 280 °C latches `FAULT:OVERTEMP`.
 - **Thermal runaway**: while heating towards a new setpoint, the temperature
   must rise at least 1 °C every 120 s until it is within 15 °C of the

@@ -30,8 +30,11 @@
 //   DT  -> A1   (Hold header)
 //   SW  -> A2   (Resume header)
 //   +   -> 5V,  GND -> GND
-// A0/A1 have no external interrupt, so the encoder is decoded by a
-// pin-change interrupt (PCINT1, port C) - see "Encoder handling" below.
+// Option -DENCODER_ON_XY_LIMITS (envs *_xy_encoder) moves CLK/DT to the
+// X+/X- (D9) and Y+/Y- (D10) end-stop headers instead, for shields whose
+// Abort/Hold headers don't pass the encoder's short quadrature pulses.
+// None of these pins has an external interrupt, so the encoder is decoded by
+// a pin-change interrupt - see "Encoder handling" below.
 // Polling alone would miss detents while loop() is busy with the
 // thermistor read / LCD I2C writes.
 // LCD I2C uses the ATmega328P's fixed I2C bus: A4 = SDA, A5 = SCL (same on
@@ -54,7 +57,7 @@
 // ---- Firmware version ------------------------------------------------------
 // Semantic version, also used as the git tag (v<version>). Shown on the LCD
 // splash screen, at boot and by the Serial '?' command.
-#define FIRMWARE_VERSION "1.1.0"
+#define FIRMWARE_VERSION "1.1.1"
 #if defined(CNC_SHIELD_V4)
 #define FIRMWARE_TARGET "Nano + CNC Shield V4"
 #else
@@ -76,10 +79,15 @@ static const uint8_t X_DIR_PIN = 5;
 #endif
 static const uint8_t STEPPERS_ENABLE_PIN = 8;
 
-// CLK/DT must stay on A0/A1 (PC0/PC1) - the PCINT1 decoder below reads
-// them straight from PINC bits 0 and 1.
-static const uint8_t ENCODER_CLK_PIN = A0;
-static const uint8_t ENCODER_DT_PIN = A1;
+// CLK/DT must stay on these exact pins - the pin-change decoder below reads
+// them straight from the port register.
+#if defined(ENCODER_ON_XY_LIMITS)
+static const uint8_t ENCODER_CLK_PIN = 9;   // PB1, X+/X- header
+static const uint8_t ENCODER_DT_PIN = 10;   // PB2, Y+/Y- header
+#else
+static const uint8_t ENCODER_CLK_PIN = A0;  // PC0, Abort header
+static const uint8_t ENCODER_DT_PIN = A1;   // PC1, Hold header
+#endif
 static const uint8_t ENCODER_SW_PIN = A2;
 
 static const uint8_t THERMISTOR_PIN = A7;
@@ -320,6 +328,11 @@ static const float THERMISTOR_T0_C = 25.0f;
 static const float THERMISTOR_BETA = 4267.0f;
 
 static const float MAX_SAFE_TEMP_C = 280.0f; // hard cutoff, above PET's normal range
+// Below this the reading is treated as a sensor fault, not a temperature: a
+// broken/high-resistance NTC or bad pin reads as a sub-zero "cold" block that
+// would otherwise sit just inside the ADC open-circuit limit and make the PID
+// heat at full power.
+static const float MIN_PLAUSIBLE_TEMP_C = 0.0f;
 static const float MAX_SETPOINT_C = 260.0f;
 static const float TEMP_STEP_C = 5.0f;       // change per encoder detent
 
@@ -457,7 +470,7 @@ bool readTemperatureC(float &outTempC) {
   float lnR = logf(r / THERMISTOR_R0);
   float tK = 1.0f / (1.0f / t0K + lnR / THERMISTOR_BETA);
   outTempC = tK - 273.15f;
-  return true;
+  return outTempC >= MIN_PLAUSIBLE_TEMP_C;
 }
 
 // Time-proportional output: within every HEATER_WINDOW_MS window the heater
@@ -1117,8 +1130,9 @@ void updateUiTimeouts() {
 }
 
 // ---- Encoder handling -------------------------------------------------
-// Quadrature decoder on pin-change interrupt PCINT1 (A0 = PC0 = CLK,
-// A1 = PC1 = DT). Same transition table / count direction as the
+// Quadrature decoder on a pin-change interrupt: PCINT1 for A0 = PC0 = CLK,
+// A1 = PC1 = DT (default), or PCINT0 for D9 = PB1 = CLK, D10 = PB2 = DT
+// (ENCODER_ON_XY_LIMITS). Same transition table / count direction as the
 // PJRC Encoder library: 4 counts per KY-040 detent. Invalid double-bit
 // jumps (noise / missed edge) are ignored instead of guessed.
 volatile long encoderCount = 0;
@@ -1131,8 +1145,20 @@ static const int8_t ENCODER_TABLE[16] = {
   0, -1, 1, 0       // new 11
 };
 
-ISR(PCINT1_vect) {
-  uint8_t ab = PINC & 0x03;
+#if defined(ENCODER_ON_XY_LIMITS)
+#define ENCODER_PCINT_vect PCINT0_vect
+static inline uint8_t readEncoderAB() {
+  return (PINB >> PB1) & 0x03;  // bit0 = CLK (PB1), bit1 = DT (PB2)
+}
+#else
+#define ENCODER_PCINT_vect PCINT1_vect
+static inline uint8_t readEncoderAB() {
+  return PINC & 0x03;           // bit0 = CLK (PC0), bit1 = DT (PC1)
+}
+#endif
+
+ISR(ENCODER_PCINT_vect) {
+  uint8_t ab = readEncoderAB();
   encoderCount += ENCODER_TABLE[encoderPrevAB | (ab << 2)];
   encoderPrevAB = ab;
 }
@@ -1140,10 +1166,16 @@ ISR(PCINT1_vect) {
 void setupEncoder() {
   pinMode(ENCODER_CLK_PIN, INPUT_PULLUP);
   pinMode(ENCODER_DT_PIN, INPUT_PULLUP);
-  encoderPrevAB = PINC & 0x03;
+  encoderPrevAB = readEncoderAB();
+#if defined(ENCODER_ON_XY_LIMITS)
+  PCMSK0 |= _BV(PCINT1) | _BV(PCINT2); // D9, D10
+  PCIFR = _BV(PCIF0);                  // drop any stale flag
+  PCICR |= _BV(PCIE0);
+#else
   PCMSK1 |= _BV(PCINT8) | _BV(PCINT9); // A0, A1
-  PCIFR = _BV(PCIF1);                  // drop any stale flag
+  PCIFR = _BV(PCIF1);
   PCICR |= _BV(PCIE1);
+#endif
 }
 
 long readEncoder() {

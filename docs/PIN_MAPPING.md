@@ -1,6 +1,6 @@
 # Pin Mapping & Wiring Guide
 
-Panduan wiring PET Bottle Filament Maker (firmware **v1.1.0**): setiap kabel
+Panduan wiring PET Bottle Filament Maker (firmware **v1.1.1**): setiap kabel
 dari modul, ke **marker (tulisan silkscreen) di CNC shield**, ke pin Arduino.
 
 | Board | Shield | PlatformIO env | Status |
@@ -141,7 +141,24 @@ Ukur antara potensiometer dan GND, dengan supply motor menyala.
 ```
 
 - `CLK` dan `DT` **wajib** tetap di Abort / Hold (A0 / A1). ISR `PCINT1_vect`
-  membaca `PINC & 0x03` langsung. Kalau dipindah, encoder berhenti bekerja.
+  membaca `PINC & 0x03` langsung. Kalau dipindah tanpa ganti env, encoder
+  berhenti bekerja.
+
+### Opsi: CLK / DT di header X+ / Y+
+
+Di sebagian board V4, tombol di Resume berfungsi tapi putaran encoder di
+Abort / Hold tidak terbaca. Kalau begitu, pindahkan kabel CLK dan DT, lalu
+upload env `nano_xy_encoder` (atau `nano_new_xy_encoder`):
+
+| KY-040 | Marker CNC shield | Arduino | Status |
+|--------|-------------------|---------|--------|
+| `CLK` | **X+ / X-** | D9 (PB1, PCINT1) | ✅ |
+| `DT` | **Y+ / Y-** | D10 (PB2, PCINT2) | ✅ |
+| `SW` | **Resume** (tidak berubah) | A2 | ✅ |
+
+Pakai pin **sinyal** di header endstop, bukan baris GND-nya. Env ini menambah
+build flag `-DENCODER_ON_XY_LIMITS`, sehingga decoder membaca `PINB` lewat ISR
+`PCINT0_vect`. D9 / D10 lalu tidak lagi termasuk pin bebas.
 - `SW` memakai pull-up internal dan active LOW. Debounce 30 ms di software.
 - Kalau motor sering berhenti sendiri dan di serial muncul `SW short`, kabel
   SW terkena noise. Pendekkan kabel, jauhkan dari kabel motor, dan pasang
